@@ -43,7 +43,7 @@ interface AppState {
   addPhoto: (recordId: string, photo: Photo) => Promise<void>;
   removePhoto: (photoId: string) => Promise<void>;
   saveSignature: (recordId: string, signature: Signature) => Promise<void>;
-  createAnomalyReport: (report: Omit<AnomalyReport, 'id' | 'reportTime' | 'status'>) => Promise<AnomalyReport>;
+  createAnomalyReport: (report: Omit<AnomalyReport, 'id' | 'reportTime' | 'status' | 'operatorId'>) => Promise<AnomalyReport>;
   createFollowupRecord: (record: Omit<FollowupRecord, 'id'>) => Promise<FollowupRecord>;
   updateTaskStatus: (taskId: string, status: Task['status']) => Promise<void>;
   syncData: () => Promise<void>;
@@ -92,13 +92,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         await get().loadTasks();
 
         const db = getDB();
-        const [records, photos, signatures, anomalies, followups] = await Promise.all([
+        const [allRecords, allPhotos, allSignatures, allAnomalies, allFollowups] = await Promise.all([
           db.getAll('verifyRecords'),
           db.getAll('photos'),
           db.getAll('signatures'),
           db.getAll('anomalyReports'),
           db.getAll('followupRecords'),
         ]);
+
+        const userTaskIds = get().tasks.map((t) => t.id);
+
+        const records = allRecords.filter((r) => userTaskIds.includes(r.taskId));
+        const photos = allPhotos.filter((p) =>
+          records.some((r) => r.id === p.recordId)
+        );
+        const signatures = allSignatures.filter((s) =>
+          records.some((r) => r.id === s.recordId)
+        );
+        const anomalies = allAnomalies.filter((a) => userTaskIds.includes(a.taskId));
+        const followups = allFollowups.filter((f) => userTaskIds.includes(f.taskId));
 
         const recordsWithPhotos = records.map((record) => ({
           ...record,
@@ -298,8 +310,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   createAnomalyReport: async (
-    report: Omit<AnomalyReport, 'id' | 'reportTime' | 'status'>
+    report: Omit<AnomalyReport, 'id' | 'reportTime' | 'status' | 'operatorId'>
   ) => {
+    const { user } = get();
     const db = getDB();
 
     const newReport: AnomalyReport = {
@@ -307,6 +320,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: crypto.randomUUID(),
       reportTime: new Date().toISOString(),
       status: 'pending',
+      operatorId: user?.id || '',
     };
 
     await db.put('anomalyReports', newReport);

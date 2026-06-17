@@ -177,6 +177,7 @@ export interface AnomalyReport {
   description: string;
   status: AnomalyStatus;
   reportTime: string;
+  operatorId: string;
   feedback?: string;
   evidencePhotos?: string[];
 }

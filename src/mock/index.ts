@@ -156,7 +156,7 @@ export function generateVerifyRecord(task: Task): VerifyRecord {
   };
 }
 
-export function generateAnomalyReport(taskId: string, recordId: string): AnomalyReport {
+export function generateAnomalyReport(taskId: string, recordId: string, operatorId: string): AnomalyReport {
   const types = ['suspicious_fraud', 'info_mismatch', 'refuse_cooperate', 'other'] as const;
   const statuses = ['pending', 'processing', 'resolved'] as const;
 
@@ -168,6 +168,7 @@ export function generateAnomalyReport(taskId: string, recordId: string): Anomaly
     description: faker.lorem.paragraph({ min: 2, max: 4 }),
     status: statuses[faker.number.int({ min: 0, max: 2 })],
     reportTime: faker.date.recent({ days: 7 }).toISOString(),
+    operatorId,
     feedback: faker.helpers.maybe(() => faker.lorem.paragraph(), { probability: 0.5 }),
   };
 }
@@ -236,7 +237,7 @@ export async function seedMockData(userId?: string): Promise<void> {
       await db.put('verifyRecords', record);
 
       if (task.priority === 'high' || record.conclusion !== 'pass') {
-        const anomaly = generateAnomalyReport(task.id, record.id);
+        const anomaly = generateAnomalyReport(task.id, record.id, user.id);
         await db.put('anomalyReports', anomaly);
       }
 

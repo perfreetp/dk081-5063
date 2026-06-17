@@ -32,9 +32,9 @@ export default function Verify() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const {
-    currentTask,
+    tasks,
+    verifyRecords,
     certificates,
-    currentVerifyRecord,
     createVerifyRecord,
     updateVerifyRecord,
     addPhoto,
@@ -53,6 +53,7 @@ export default function Verify() {
   const [actualSituation, setActualSituation] = useState<Record<string, string>>({});
   const [step, setStep] = useState(1);
   const [record, setRecord] = useState<VerifyRecord | null>(null);
+  const [task, setTask] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -62,27 +63,29 @@ export default function Verify() {
         return;
       }
 
-      let task = currentTask;
-      if (!task || task.id !== taskId) {
-        task = await loadTaskById(taskId);
-        if (!task) {
+      let taskData = tasks.find((t) => t.id === taskId);
+      if (!taskData) {
+        taskData = await loadTaskById(taskId);
+        if (!taskData) {
           navigate('/tasks');
           return;
         }
-        setCurrentTask(task);
-        await loadCertificates(task.personId);
       }
 
-      if (task.status === 'pending') {
-        await updateTaskStatus(task.id, 'in_progress');
+      setTask(taskData);
+      setCurrentTask(taskData);
+      await loadCertificates(taskData.personId);
+
+      if (taskData.status === 'pending') {
+        await updateTaskStatus(taskData.id, 'in_progress');
       }
 
-      let existingRecord = currentVerifyRecord;
-      if (!existingRecord || existingRecord.taskId !== taskId) {
+      let existingRecord = verifyRecords.find((r) => r.taskId === taskId);
+      if (!existingRecord) {
         existingRecord = await loadVerifyRecordByTaskId(taskId);
-        if (!existingRecord) {
-          existingRecord = await createVerifyRecord(task.id);
-        }
+      }
+      if (!existingRecord) {
+        existingRecord = await createVerifyRecord(taskData.id);
       }
 
       setRecord(existingRecord);
@@ -96,9 +99,9 @@ export default function Verify() {
     };
 
     initPage();
-  }, [taskId]);
+  }, [taskId, tasks, verifyRecords]);
 
-  if (isLoading || !currentTask || !record) {
+  if (isLoading || !task || !record) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-xl text-neutral-500">加载中...</div>
@@ -106,7 +109,6 @@ export default function Verify() {
     );
   }
 
-  const task = currentTask;
   const person = task.person;
   const allowedCerts = certificates.filter((c) =>
     task.allowedCerts.includes(c.type)

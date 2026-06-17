@@ -24,8 +24,8 @@ export default function Authorize() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const {
-    currentTask,
-    currentVerifyRecord,
+    tasks,
+    verifyRecords,
     saveSignature,
     updateTaskStatus,
     createAnomalyReport,
@@ -45,6 +45,8 @@ export default function Authorize() {
   const [isSigned, setIsSigned] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [task, setTask] = useState(null);
+  const [record, setRecord] = useState(null);
 
   useEffect(() => {
     const initPage = async () => {
@@ -53,19 +55,21 @@ export default function Authorize() {
         return;
       }
 
-      let task = currentTask;
-      if (!task || task.id !== taskId) {
-        task = await loadTaskById(taskId);
-        if (!task) {
+      let taskData = tasks.find((t) => t.id === taskId);
+      if (!taskData) {
+        taskData = await loadTaskById(taskId);
+        if (!taskData) {
           navigate('/tasks');
           return;
         }
-        setCurrentTask(task);
-        await loadCertificates(task.personId);
       }
 
-      let verifyRecord = currentVerifyRecord;
-      if (!verifyRecord || verifyRecord.taskId !== taskId) {
+      setTask(taskData);
+      setCurrentTask(taskData);
+      await loadCertificates(taskData.personId);
+
+      let verifyRecord = verifyRecords.find((r) => r.taskId === taskId);
+      if (!verifyRecord) {
         verifyRecord = await loadVerifyRecordByTaskId(taskId);
         if (!verifyRecord) {
           navigate(`/verify/${taskId}`);
@@ -73,17 +77,23 @@ export default function Authorize() {
         }
       }
 
+      setRecord(verifyRecord);
+
+      if (verifyRecord.signature) {
+        setIsSigned(true);
+      }
+
       if (signMode === 'self') {
-        setSignerName(task.person.name);
+        setSignerName(taskData.person.name);
       }
 
       setIsLoading(false);
     };
 
     initPage();
-  }, [taskId, signMode]);
+  }, [taskId, signMode, tasks, verifyRecords]);
 
-  if (isLoading || !currentTask || !currentVerifyRecord) {
+  if (isLoading || !task || !record) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-xl text-neutral-500">加载中...</div>
@@ -91,8 +101,25 @@ export default function Authorize() {
     );
   }
 
-  const task = currentTask;
-  const record = currentVerifyRecord;
+  const taskInfo = task;
+  const recordInfo = record;
+
+  useEffect(() => {
+    if (!isLoading && recordInfo?.signature?.signatureData && sigCanvasRef.current) {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = sigCanvasRef.current?.getCanvas();
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            setIsSigned(true);
+          }
+        }
+      };
+      img.src = recordInfo.signature.signatureData;
+    }
+  }, [isLoading, recordInfo?.signature?.signatureData]);
 
   const handleClear = () => {
     sigCanvasRef.current?.clear();
@@ -151,10 +178,10 @@ export default function Authorize() {
 
       const signature: Signature = {
         id: crypto.randomUUID(),
-        recordId: record.id,
+        recordId: recordInfo.id,
         signerName,
         relation: signMode === 'self' ? '本人' : delegateRelation,
-        idCard: signMode === 'self' ? task.person.idCard : delegateIdCard,
+        idCard: signMode === 'self' ? taskInfo.person.idCard : delegateIdCard,
         signatureData,
         isDelegate: signMode === 'delegate',
         refuseReason:
@@ -163,13 +190,13 @@ export default function Authorize() {
             : undefined,
       };
 
-      await saveSignature(record.id, signature);
-      await updateTaskStatus(task.id, 'completed');
+      await saveSignature(recordInfo.id, signature);
+      await updateTaskStatus(taskInfo.id, 'completed');
 
       if (signMode === 'refuse') {
         await createAnomalyReport({
-          recordId: record.id,
-          taskId: task.id,
+          recordId: recordInfo.id,
+          taskId: taskInfo.id,
           type: 'refuse_cooperate',
           description: `拒绝授权核验，原因：${signature.refuseReason}`,
         });
@@ -190,7 +217,7 @@ export default function Authorize() {
   };
 
   const handleBack = () => {
-    navigate(`/verify/${task.id}`);
+    navigate(`/verify/${taskInfo.id}`);
   };
 
   return (
@@ -204,29 +231,29 @@ export default function Authorize() {
               <div
                 className={cn(
                   'w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-bold flex-shrink-0',
-                  task.person.gender === '男'
+                  taskInfo.person.gender === '男'
                     ? 'bg-blue-100 text-blue-600'
                     : 'bg-pink-100 text-pink-600'
                 )}
               >
-                {task.person.name.charAt(0)}
+                {taskInfo.person.name.charAt(0)}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <h3 className="text-2xl font-bold text-neutral-800">
-                    {task.person.name}
+                    {taskInfo.person.name}
                   </h3>
                   <span
                     className="px-3 py-1 rounded-lg text-base font-bold bg-primary-100 text-primary-600"
                   >
-                    {TASK_TYPE_LABELS[task.type]}
+                    {TASK_TYPE_LABELS[taskInfo.type]}
                   </span>
                 </div>
                 <p className="text-lg text-neutral-500">
-                  {task.person.age}岁 · {maskIdCard(task.person.idCard)}
+                  {taskInfo.person.age}岁 · {maskIdCard(taskInfo.person.idCard)}
                 </p>
                 <p className="text-lg text-neutral-500 mt-1">
-                  {task.person.address}
+                  {taskInfo.person.address}
                 </p>
               </div>
             </div>
@@ -383,7 +410,7 @@ export default function Authorize() {
               <p className="text-base text-neutral-500 mb-4">
                 请
                 {signMode === 'self'
-                  ? `${task.person.name}本人`
+                  ? `${taskInfo.person.name}本人`
                   : `代签人${signerName || ' '}`}
                 在下方区域签名
               </p>
