@@ -269,14 +269,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     const db = getDB();
     await db.put('photos', photo);
 
-    set((state) => ({
-      photos: [...state.photos, photo],
-    }));
+    set((state) => {
+      const updatedPhotos = [...state.photos, photo];
+      const updatedVerifyRecords = state.verifyRecords.map((r) =>
+        r.id === recordId
+          ? { ...r, photos: [...r.photos, photo] }
+          : r
+      );
+      return {
+        photos: updatedPhotos,
+        verifyRecords: updatedVerifyRecords,
+        currentVerifyRecord:
+          state.currentVerifyRecord?.id === recordId
+            ? { ...state.currentVerifyRecord, photos: [...state.currentVerifyRecord.photos, photo] }
+            : state.currentVerifyRecord,
+      };
+    });
 
     const record = await db.get('verifyRecords', recordId);
     if (record) {
       const updatedPhotos = [...record.photos, photo];
-      await get().updateVerifyRecord(recordId, { photos: updatedPhotos });
+      await db.put('verifyRecords', { ...record, photos: updatedPhotos });
     }
   },
 
@@ -287,14 +300,30 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     await db.delete('photos', photoId);
 
-    set((state) => ({
-      photos: state.photos.filter((p) => p.id !== photoId),
-    }));
+    set((state) => {
+      const updatedPhotos = state.photos.filter((p) => p.id !== photoId);
+      const updatedVerifyRecords = state.verifyRecords.map((r) =>
+        r.id === photo.recordId
+          ? { ...r, photos: r.photos.filter((p) => p.id !== photoId) }
+          : r
+      );
+      return {
+        photos: updatedPhotos,
+        verifyRecords: updatedVerifyRecords,
+        currentVerifyRecord:
+          state.currentVerifyRecord?.id === photo.recordId
+            ? {
+                ...state.currentVerifyRecord,
+                photos: state.currentVerifyRecord.photos.filter((p) => p.id !== photoId),
+              }
+            : state.currentVerifyRecord,
+      };
+    });
 
     const record = await db.get('verifyRecords', photo.recordId);
     if (record) {
       const updatedPhotos = record.photos.filter((p) => p.id !== photoId);
-      await get().updateVerifyRecord(photo.recordId, { photos: updatedPhotos });
+      await db.put('verifyRecords', { ...record, photos: updatedPhotos });
     }
   },
 
@@ -302,11 +331,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     const db = getDB();
     await db.put('signatures', signature);
 
-    set((state) => ({
-      signatures: [...state.signatures.filter((s) => s.recordId !== recordId), signature],
-    }));
+    set((state) => {
+      const updatedSignatures = [
+        ...state.signatures.filter((s) => s.recordId !== recordId),
+        signature,
+      ];
+      const updatedVerifyRecords = state.verifyRecords.map((r) =>
+        r.id === recordId
+          ? { ...r, signature }
+          : r
+      );
+      return {
+        signatures: updatedSignatures,
+        verifyRecords: updatedVerifyRecords,
+        currentVerifyRecord:
+          state.currentVerifyRecord?.id === recordId
+            ? { ...state.currentVerifyRecord, signature }
+            : state.currentVerifyRecord,
+      };
+    });
 
-    await get().updateVerifyRecord(recordId, { signature });
+    const record = await db.get('verifyRecords', recordId);
+    if (record) {
+      await db.put('verifyRecords', { ...record, signature });
+    }
   },
 
   createAnomalyReport: async (

@@ -16,7 +16,7 @@ import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
 import CameraCapture from '@/components/CameraCapture';
 import { useAppStore } from '@/store';
-import type { PhotoType, VerifyConclusion, Photo, VerifyRecord } from '@/types';
+import type { PhotoType, VerifyConclusion, Photo, VerifyRecord, Task } from '@/types';
 import {
   CERT_TYPE_LABELS,
   CERT_STATUS_LABELS,
@@ -52,9 +52,20 @@ export default function Verify() {
   const [differenceMark, setDifferenceMark] = useState('');
   const [actualSituation, setActualSituation] = useState<Record<string, string>>({});
   const [step, setStep] = useState(1);
-  const [record, setRecord] = useState<VerifyRecord | null>(null);
-  const [task, setTask] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [task, setTask] = useState<Task | null>(null);
+
+  const record = task
+    ? verifyRecords.find((r) => r.taskId === task.id) || null
+    : null;
+
+  useEffect(() => {
+    if (record) {
+      setConclusion(record.conclusion);
+      setDifferenceMark(record.differenceMark);
+      setActualSituation(record.actualSituation || {});
+    }
+  }, [record?.id]);
 
   useEffect(() => {
     const initPage = async () => {
@@ -88,18 +99,11 @@ export default function Verify() {
         existingRecord = await createVerifyRecord(taskData.id);
       }
 
-      setRecord(existingRecord);
-      if (existingRecord) {
-        setConclusion(existingRecord.conclusion);
-        setDifferenceMark(existingRecord.differenceMark);
-        setActualSituation(existingRecord.actualSituation || {});
-      }
-
       setIsLoading(false);
     };
 
     initPage();
-  }, [taskId, tasks, verifyRecords]);
+  }, [taskId]);
 
   if (isLoading || !task || !record) {
     return (
@@ -132,16 +136,12 @@ export default function Verify() {
     };
 
     await addPhoto(record.id, photo);
-    const updatedRecord = useAppStore.getState().currentVerifyRecord;
-    setRecord(updatedRecord);
     showToast('照片已保存');
   };
 
   const handleRemovePhoto = async (photoId: string) => {
     if (window.confirm('确定要删除这张照片吗？')) {
       await removePhoto(photoId);
-      const updatedRecord = useAppStore.getState().currentVerifyRecord;
-      setRecord(updatedRecord);
       showToast('照片已删除');
     }
   };

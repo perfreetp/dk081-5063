@@ -5,12 +5,15 @@ import type {
   Person,
   Certificate,
   VerifyRecord,
+  Photo,
+  Signature,
   AnomalyReport,
   FollowupRecord,
   TaskType,
   TaskPriority,
   TaskStatus,
   CertType,
+  PhotoType,
 } from '@/types';
 import { getDB } from '@/db';
 
@@ -156,6 +159,56 @@ export function generateVerifyRecord(task: Task): VerifyRecord {
   };
 }
 
+function generatePlaceholderImage(width: number, height: number, label: string): string {
+  const colors = ['#2563EB', '#22C55E', '#F97316', '#EF4444', '#8B5CF6'];
+  const color = colors[faker.number.int({ min: 0, max: colors.length - 1 })];
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect width="100%" height="100%" fill="${color}" opacity="0.3"/>
+      <rect x="10" y="10" width="${width - 20}" height="${height - 20}" fill="${color}" opacity="0.5" rx="8"/>
+      <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="20" font-weight="bold">${label}</text>
+    </svg>
+  `.trim();
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
+
+export function generatePhoto(recordId: string, type: PhotoType): Photo {
+  const photoTypeLabels: Record<PhotoType, string> = {
+    door_plate: '门牌照',
+    portrait: '人像照',
+    environment: '环境照',
+    cert_photo: '证照照',
+  };
+  const dataUrl = generatePlaceholderImage(400, 300, photoTypeLabels[type]);
+  return {
+    id: generateId(),
+    recordId,
+    type,
+    dataUrl,
+    remark: photoTypeLabels[type],
+    shootTime: faker.date.recent({ days: 1 }).toISOString(),
+  };
+}
+
+export function generateSignature(recordId: string, personName: string): Signature {
+  const sigSvg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100">
+      <path d="M20,60 Q50,20 100,50 T180,40 Q220,50 260,35 T290,45" 
+        stroke="#1E3A5F" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <text x="150" y="75" text-anchor="middle" fill="#1E3A5F" font-size="16" font-family="cursive">${personName}</text>
+    </svg>
+  `.trim();
+  return {
+    id: generateId(),
+    recordId,
+    signerName: personName,
+    relation: '本人',
+    idCard: '',
+    signatureData: `data:image/svg+xml;base64,${btoa(sigSvg)}`,
+    isDelegate: false,
+  };
+}
+
 export function generateAnomalyReport(taskId: string, recordId: string, operatorId: string): AnomalyReport {
   const types = ['suspicious_fraud', 'info_mismatch', 'refuse_cooperate', 'other'] as const;
   const statuses = ['pending', 'processing', 'resolved'] as const;
@@ -235,6 +288,19 @@ export async function seedMockData(userId?: string): Promise<void> {
     if (task.status === 'completed') {
       const record = generateVerifyRecord(task);
       await db.put('verifyRecords', record);
+
+      const photoTypes: PhotoType[] = ['door_plate', 'portrait', 'environment'];
+      const numPhotos = faker.number.int({ min: 2, max: 4 });
+      const selectedTypes = faker.helpers.arrayElements(photoTypes, Math.min(numPhotos, photoTypes.length));
+      for (const pType of selectedTypes) {
+        const photo = generatePhoto(record.id, pType);
+        await db.put('photos', photo);
+      }
+
+      if (faker.datatype.boolean({ probability: 0.7 })) {
+        const signature = generateSignature(record.id, task.person.name);
+        await db.put('signatures', signature);
+      }
 
       if (task.priority === 'high' || record.conclusion !== 'pass') {
         const anomaly = generateAnomalyReport(task.id, record.id, user.id);

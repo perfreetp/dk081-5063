@@ -45,8 +45,32 @@ export default function Authorize() {
   const [isSigned, setIsSigned] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [task, setTask] = useState(null);
-  const [record, setRecord] = useState(null);
+  const [task, setTask] = useState<Task | null>(null);
+  const [signatureLoaded, setSignatureLoaded] = useState(false);
+
+  const record = task
+    ? verifyRecords.find((r) => r.taskId === task.id) || null
+    : null;
+
+  useEffect(() => {
+    if (record?.signature && !signatureLoaded && sigCanvasRef.current) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = sigCanvasRef.current?.getCanvas();
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            setIsSigned(true);
+            setSignatureLoaded(true);
+          }
+        }
+      };
+      img.src = record.signature.signatureData;
+    }
+  }, [record?.signature?.id, signatureLoaded, isLoading]);
 
   useEffect(() => {
     const initPage = async () => {
@@ -77,12 +101,6 @@ export default function Authorize() {
         }
       }
 
-      setRecord(verifyRecord);
-
-      if (verifyRecord.signature) {
-        setIsSigned(true);
-      }
-
       if (signMode === 'self') {
         setSignerName(taskData.person.name);
       }
@@ -91,7 +109,20 @@ export default function Authorize() {
     };
 
     initPage();
-  }, [taskId, signMode, tasks, verifyRecords]);
+  }, [taskId, signMode]);
+
+  useEffect(() => {
+    if (signMode === 'self' && task) {
+      setSignerName(task.person.name);
+    }
+    setSignatureLoaded(false);
+    setIsSigned(false);
+    setTimeout(() => {
+      if (sigCanvasRef.current) {
+        sigCanvasRef.current.clear();
+      }
+    }, 0);
+  }, [signMode, task?.id]);
 
   if (isLoading || !task || !record) {
     return (
@@ -104,31 +135,16 @@ export default function Authorize() {
   const taskInfo = task;
   const recordInfo = record;
 
-  useEffect(() => {
-    if (!isLoading && recordInfo?.signature?.signatureData && sigCanvasRef.current) {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = sigCanvasRef.current?.getCanvas();
-        if (canvas) {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0);
-            setIsSigned(true);
-          }
-        }
-      };
-      img.src = recordInfo.signature.signatureData;
-    }
-  }, [isLoading, recordInfo?.signature?.signatureData]);
-
   const handleClear = () => {
     sigCanvasRef.current?.clear();
     setIsSigned(false);
+    setSignatureLoaded(false);
   };
 
   const handleEndStroke = () => {
     if (sigCanvasRef.current) {
       setIsSigned(!sigCanvasRef.current.isEmpty());
+      setSignatureLoaded(false);
     }
   };
 
