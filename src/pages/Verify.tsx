@@ -44,28 +44,32 @@ export default function Verify() {
     loadTaskById,
     loadVerifyRecordByTaskId,
     loadCertificates,
+    isLoading: storeLoading,
   } = useAppStore();
 
   const [cameraOpen, setCameraOpen] = useState(false);
   const [currentPhotoType, setCurrentPhotoType] = useState<PhotoType>('door_plate');
+  const [step, setStep] = useState(1);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [localTask, setLocalTask] = useState<Task | null>(null);
+  const [localRecordId, setLocalRecordId] = useState<string | null>(null);
   const [conclusion, setConclusion] = useState<VerifyConclusion>('pass');
   const [differenceMark, setDifferenceMark] = useState('');
   const [actualSituation, setActualSituation] = useState<Record<string, string>>({});
-  const [step, setStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
-  const [task, setTask] = useState<Task | null>(null);
 
-  const record = task
-    ? verifyRecords.find((r) => r.taskId === task.id) || null
-    : null;
+  const record = verifyRecords.find((r) => r.id === localRecordId) ||
+                 verifyRecords.find((r) => r.taskId === taskId) || null;
+
+  const task = localTask || tasks.find((t) => t.id === taskId) || null;
 
   useEffect(() => {
-    if (record) {
+    if (record && localRecordId !== record.id) {
       setConclusion(record.conclusion);
       setDifferenceMark(record.differenceMark);
       setActualSituation(record.actualSituation || {});
+      setLocalRecordId(record.id);
     }
-  }, [record?.id]);
+  }, [record?.id, localRecordId]);
 
   useEffect(() => {
     const initPage = async () => {
@@ -73,6 +77,8 @@ export default function Verify() {
         navigate('/tasks');
         return;
       }
+
+      setPageLoading(true);
 
       let taskData = tasks.find((t) => t.id === taskId);
       if (!taskData) {
@@ -83,7 +89,7 @@ export default function Verify() {
         }
       }
 
-      setTask(taskData);
+      setLocalTask(taskData);
       setCurrentTask(taskData);
       await loadCertificates(taskData.personId);
 
@@ -91,21 +97,27 @@ export default function Verify() {
         await updateTaskStatus(taskData.id, 'in_progress');
       }
 
-      let existingRecord = verifyRecords.find((r) => r.taskId === taskId);
-      if (!existingRecord) {
-        existingRecord = await loadVerifyRecordByTaskId(taskId);
+      let verifyRecord = verifyRecords.find((r) => r.taskId === taskId);
+      if (!verifyRecord) {
+        verifyRecord = await loadVerifyRecordByTaskId(taskId);
       }
-      if (!existingRecord) {
-        existingRecord = await createVerifyRecord(taskData.id);
+      if (!verifyRecord) {
+        verifyRecord = await createVerifyRecord(taskData.id);
       }
 
-      setIsLoading(false);
+      setLocalRecordId(verifyRecord.id);
+      setConclusion(verifyRecord.conclusion);
+      setDifferenceMark(verifyRecord.differenceMark);
+      setActualSituation(verifyRecord.actualSituation || {});
+      setPageLoading(false);
     };
 
     initPage();
   }, [taskId]);
 
-  if (isLoading || !task || !record) {
+  const isLoading = pageLoading || storeLoading || !task || !record;
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-xl text-neutral-500">加载中...</div>
@@ -113,9 +125,9 @@ export default function Verify() {
     );
   }
 
-  const person = task.person;
+  const person = task!.person;
   const allowedCerts = certificates.filter((c) =>
-    task.allowedCerts.includes(c.type)
+    task!.allowedCerts.includes(c.type)
   );
 
   const handleOpenCamera = (type: PhotoType) => {

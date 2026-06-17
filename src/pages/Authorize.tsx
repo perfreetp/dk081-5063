@@ -33,6 +33,7 @@ export default function Authorize() {
     loadTaskById,
     loadVerifyRecordByTaskId,
     loadCertificates,
+    isLoading: storeLoading,
   } = useAppStore();
 
   const [signMode, setSignMode] = useState<SignMode>('self');
@@ -44,33 +45,38 @@ export default function Authorize() {
   const [refuseRemark, setRefuseRemark] = useState('');
   const [isSigned, setIsSigned] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [task, setTask] = useState<Task | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [localTask, setLocalTask] = useState<Task | null>(null);
+  const [localRecordId, setLocalRecordId] = useState<string | null>(null);
   const [signatureLoaded, setSignatureLoaded] = useState(false);
 
-  const record = task
-    ? verifyRecords.find((r) => r.taskId === task.id) || null
-    : null;
+  const record = verifyRecords.find((r) => r.id === localRecordId) ||
+                 verifyRecords.find((r) => r.taskId === taskId) || null;
+
+  const task = localTask || tasks.find((t) => t.id === taskId) || null;
 
   useEffect(() => {
     if (record?.signature && !signatureLoaded && sigCanvasRef.current) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const canvas = sigCanvasRef.current?.getCanvas();
-        if (canvas) {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
+      const canvas = sigCanvasRef.current.getCanvas();
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
             setIsSigned(true);
             setSignatureLoaded(true);
-          }
+          };
+          img.src = record.signature.signatureData;
+          return;
         }
-      };
-      img.src = record.signature.signatureData;
+      }
+      setIsSigned(true);
+      setSignatureLoaded(true);
     }
-  }, [record?.signature?.id, signatureLoaded, isLoading]);
+  }, [record?.signature?.id, signatureLoaded, pageLoading]);
 
   useEffect(() => {
     const initPage = async () => {
@@ -78,6 +84,8 @@ export default function Authorize() {
         navigate('/tasks');
         return;
       }
+
+      setPageLoading(true);
 
       let taskData = tasks.find((t) => t.id === taskId);
       if (!taskData) {
@@ -88,7 +96,7 @@ export default function Authorize() {
         }
       }
 
-      setTask(taskData);
+      setLocalTask(taskData);
       setCurrentTask(taskData);
       await loadCertificates(taskData.personId);
 
@@ -101,15 +109,17 @@ export default function Authorize() {
         }
       }
 
-      if (signMode === 'self') {
-        setSignerName(taskData.person.name);
-      }
+      setLocalRecordId(verifyRecord.id);
+      setSignerName(taskData.person.name);
+      setPageLoading(false);
 
-      setIsLoading(false);
+      if (verifyRecord.signature) {
+        setIsSigned(true);
+      }
     };
 
     initPage();
-  }, [taskId, signMode]);
+  }, [taskId]);
 
   useEffect(() => {
     if (signMode === 'self' && task) {
@@ -124,7 +134,9 @@ export default function Authorize() {
     }, 0);
   }, [signMode, task?.id]);
 
-  if (isLoading || !task || !record) {
+  const isLoading = pageLoading || storeLoading || !task || !record;
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-xl text-neutral-500">加载中...</div>
@@ -132,8 +144,8 @@ export default function Authorize() {
     );
   }
 
-  const taskInfo = task;
-  const recordInfo = record;
+  const taskInfo = task!;
+  const recordInfo = record!;
 
   const handleClear = () => {
     sigCanvasRef.current?.clear();

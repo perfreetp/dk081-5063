@@ -12,7 +12,7 @@ import type {
   VerifyConclusion,
   AnomalyType,
 } from '@/types';
-import { getDB } from '@/db';
+import { getDB, initDB } from '@/db';
 import { getCurrentUser, clearCurrentUser } from '@/mock';
 
 interface AppState {
@@ -86,6 +86,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadInitialData: async () => {
     set({ isLoading: true });
     try {
+      await initDB();
       const user = await getCurrentUser();
       if (user) {
         set({ user });
@@ -160,9 +161,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       const records = await db.getAllFromIndex('verifyRecords', 'by-taskId', taskId);
       if (records.length > 0) {
         const record = records[0];
-        const photos = get().photos.filter((p) => p.recordId === record.id);
-        const signature = get().signatures.find((s) => s.recordId === record.id);
-        return { ...record, photos, signature };
+        const allPhotos = await db.getAllFromIndex('photos', 'by-recordId', record.id);
+        const allSignatures = await db.getAllFromIndex('signatures', 'by-recordId', record.id);
+        const signature = allSignatures.length > 0 ? allSignatures[0] : null;
+
+        const fullRecord = { ...record, photos: allPhotos, signature };
+
+        set((state) => {
+          const exists = state.verifyRecords.some((r) => r.id === fullRecord.id);
+          if (exists) {
+            return {
+              verifyRecords: state.verifyRecords.map((r) =>
+                r.id === fullRecord.id ? fullRecord : r
+              ),
+            };
+          }
+          return { verifyRecords: [...state.verifyRecords, fullRecord] };
+        });
+
+        return fullRecord;
       }
       return null;
     } catch (error) {

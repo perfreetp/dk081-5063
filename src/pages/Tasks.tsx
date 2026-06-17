@@ -47,11 +47,7 @@ export default function Tasks() {
 
   const handleView = (task: Task) => {
     setCurrentTask(task);
-    if (task.status === 'completed') {
-      navigate(`/followup?taskId=${task.id}`);
-    } else {
-      navigate(`/verify/${task.id}`);
-    }
+    navigate(`/verify/${task.id}`);
   };
 
   const handleRefresh = () => {
