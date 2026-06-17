@@ -29,6 +29,10 @@ export default function Authorize() {
     saveSignature,
     updateTaskStatus,
     createAnomalyReport,
+    setCurrentTask,
+    loadTaskById,
+    loadVerifyRecordByTaskId,
+    loadCertificates,
   } = useAppStore();
 
   const [signMode, setSignMode] = useState<SignMode>('self');
@@ -40,19 +44,46 @@ export default function Authorize() {
   const [refuseRemark, setRefuseRemark] = useState('');
   const [isSigned, setIsSigned] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentTask || currentTask.id !== taskId) {
-      navigate('/tasks');
-      return;
-    }
+    const initPage = async () => {
+      if (!taskId) {
+        navigate('/tasks');
+        return;
+      }
 
-    if (signMode === 'self') {
-      setSignerName(currentTask.person.name);
-    }
-  }, [currentTask, taskId, signMode]);
+      let task = currentTask;
+      if (!task || task.id !== taskId) {
+        task = await loadTaskById(taskId);
+        if (!task) {
+          navigate('/tasks');
+          return;
+        }
+        setCurrentTask(task);
+        await loadCertificates(task.personId);
+      }
 
-  if (!currentTask || !currentVerifyRecord) {
+      let verifyRecord = currentVerifyRecord;
+      if (!verifyRecord || verifyRecord.taskId !== taskId) {
+        verifyRecord = await loadVerifyRecordByTaskId(taskId);
+        if (!verifyRecord) {
+          navigate(`/verify/${taskId}`);
+          return;
+        }
+      }
+
+      if (signMode === 'self') {
+        setSignerName(task.person.name);
+      }
+
+      setIsLoading(false);
+    };
+
+    initPage();
+  }, [taskId, signMode]);
+
+  if (isLoading || !currentTask || !currentVerifyRecord) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-xl text-neutral-500">加载中...</div>

@@ -34,6 +34,7 @@ export default function Login() {
       const user = await login(employeeNo.trim(), password);
 
       if (user) {
+        await seedMockData(user.id);
         setUser(user);
         speak('登录成功');
         showToast(`欢迎回来，${user.name}`);
@@ -41,7 +42,7 @@ export default function Login() {
           navigate('/tasks');
         }, 500);
       } else {
-        showToast('工号或密码错误');
+        showToast('登录失败，请重试');
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -130,10 +131,10 @@ export default function Login() {
 
           <div className="mt-8 p-5 bg-primary-50 rounded-xl">
             <p className="text-base text-primary-700 text-center">
-              <strong>演示提示：</strong>首次登录将自动生成演示数据
+              <strong>演示提示：</strong>任意工号和密码即可登录
             </p>
             <p className="text-sm text-primary-600 text-center mt-1">
-              任意工号和密码即可登录
+              首次登录将自动生成15条演示任务数据
             </p>
           </div>
         </div>

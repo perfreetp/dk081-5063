@@ -40,6 +40,10 @@ export default function Verify() {
     addPhoto,
     removePhoto,
     updateTaskStatus,
+    setCurrentTask,
+    loadTaskById,
+    loadVerifyRecordByTaskId,
+    loadCertificates,
   } = useAppStore();
 
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -49,31 +53,52 @@ export default function Verify() {
   const [actualSituation, setActualSituation] = useState<Record<string, string>>({});
   const [step, setStep] = useState(1);
   const [record, setRecord] = useState<VerifyRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentTask || currentTask.id !== taskId) {
-      navigate('/tasks');
-      return;
-    }
-
-    const initRecord = async () => {
-      if (currentTask.status === 'pending') {
-        await updateTaskStatus(currentTask.id, 'in_progress');
+    const initPage = async () => {
+      if (!taskId) {
+        navigate('/tasks');
+        return;
       }
 
-      const existing = currentVerifyRecord || await createVerifyRecord(currentTask.id);
-      setRecord(existing);
-      if (existing) {
-        setConclusion(existing.conclusion);
-        setDifferenceMark(existing.differenceMark);
-        setActualSituation(existing.actualSituation || {});
+      let task = currentTask;
+      if (!task || task.id !== taskId) {
+        task = await loadTaskById(taskId);
+        if (!task) {
+          navigate('/tasks');
+          return;
+        }
+        setCurrentTask(task);
+        await loadCertificates(task.personId);
       }
+
+      if (task.status === 'pending') {
+        await updateTaskStatus(task.id, 'in_progress');
+      }
+
+      let existingRecord = currentVerifyRecord;
+      if (!existingRecord || existingRecord.taskId !== taskId) {
+        existingRecord = await loadVerifyRecordByTaskId(taskId);
+        if (!existingRecord) {
+          existingRecord = await createVerifyRecord(task.id);
+        }
+      }
+
+      setRecord(existingRecord);
+      if (existingRecord) {
+        setConclusion(existingRecord.conclusion);
+        setDifferenceMark(existingRecord.differenceMark);
+        setActualSituation(existingRecord.actualSituation || {});
+      }
+
+      setIsLoading(false);
     };
 
-    initRecord();
-  }, [currentTask, taskId]);
+    initPage();
+  }, [taskId]);
 
-  if (!currentTask || !record) {
+  if (isLoading || !currentTask || !record) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-xl text-neutral-500">加载中...</div>

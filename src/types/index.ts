@@ -55,6 +55,7 @@ export interface Person {
   name: string;
   idCard: string;
   address: string;
+  street: string;
   community: string;
   age: number;
   phone?: string;
@@ -212,6 +213,11 @@ export interface Statistics {
   completionRate: number;
   anomalyCount: number;
   byCommunity: Record<string, { total: number; completed: number }>;
+  byStreet: Record<string, {
+    total: number;
+    completed: number;
+    communities: Record<string, { total: number; completed: number }>;
+  }>;
 }
 
 export const REFUSE_REASONS = [

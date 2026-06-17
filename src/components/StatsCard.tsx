@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import { useAppStore } from '@/store';
+import { MapPin, Building2, ChevronDown, ChevronUp } from 'lucide-react';
+import { cn } from '@/utils';
 
 export default function StatsCard() {
   const stats = useAppStore((state) => state.getStatistics());
+  const [expandedStreet, setExpandedStreet] = useState<string | null>(null);
 
   const cards = [
     {
@@ -33,6 +37,10 @@ export default function StatsCard() {
       textColor: 'text-neutral-600',
     },
   ];
+
+  const toggleStreet = (street: string) => {
+    setExpandedStreet(expandedStreet === street ? null : street);
+  };
 
   return (
     <div className="mb-6">
@@ -67,32 +75,114 @@ export default function StatsCard() {
           />
         </div>
 
-        {Object.keys(stats.byCommunity).length > 0 && (
+        {Object.keys(stats.byStreet).length > 0 && (
           <div className="mt-6">
-            <h4 className="text-lg font-bold text-neutral-700 mb-3">按社区统计</h4>
-            <div className="space-y-3">
-              {Object.entries(stats.byCommunity).map(
-                ([community, data]) => {
-                  const rate =
-                    data.total > 0
-                      ? (data.completed / data.total) * 100
+            <h4 className="text-lg font-bold text-neutral-700 mb-3 flex items-center gap-2">
+              <Building2 size={20} className="text-primary-600" />
+              按街道社区统计
+            </h4>
+            <div className="space-y-4">
+              {Object.entries(stats.byStreet).map(
+                ([street, streetData]) => {
+                  const streetRate =
+                    streetData.total > 0
+                      ? (streetData.completed / streetData.total) * 100
                       : 0;
+                  const isExpanded = expandedStreet === street;
+
                   return (
-                    <div key={community} className="space-y-1">
-                      <div className="flex justify-between text-base">
-                        <span className="font-medium text-neutral-700">
-                          {community}
-                        </span>
-                        <span className="text-neutral-500">
-                          {data.completed}/{data.total} ({rate.toFixed(0)}%)
-                        </span>
+                    <div
+                      key={street}
+                      className="border-2 border-neutral-200 rounded-xl overflow-hidden"
+                    >
+                      <div
+                        onClick={() => toggleStreet(street)}
+                        className="bg-neutral-50 p-4 cursor-pointer hover:bg-neutral-100 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Building2 size={22} className="text-primary-600" />
+                            <span className="text-lg font-bold text-neutral-800">
+                              {street}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-base text-neutral-600">
+                              <span className="font-bold text-success-600">
+                                {streetData.completed}
+                              </span>
+                              <span className="mx-1">/</span>
+                              <span>{streetData.total}</span>
+                              <span className="ml-2 text-neutral-400">
+                                ({streetRate.toFixed(0)}%)
+                              </span>
+                            </span>
+                            {isExpanded ? (
+                              <ChevronUp size={22} className="text-neutral-400" />
+                            ) : (
+                              <ChevronDown size={22} className="text-neutral-400" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="w-full h-3 bg-neutral-200 rounded-full overflow-hidden mt-3">
+                          <div
+                            className="h-full bg-primary-500 rounded-full transition-all"
+                            style={{ width: `${streetRate}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full h-3 bg-neutral-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-success-500 rounded-full transition-all"
-                          style={{ width: `${rate}%` }}
-                        />
-                      </div>
+
+                      {isExpanded && (
+                        <div className="p-4 bg-white space-y-3">
+                          {Object.entries(streetData.communities).map(
+                            ([community, data]) => {
+                              const rate =
+                                data.total > 0
+                                  ? (data.completed / data.total) * 100
+                                  : 0;
+                              return (
+                                <div
+                                  key={community}
+                                  className="pl-4 border-l-3 border-primary-200"
+                                >
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-2">
+                                      <MapPin size={18} className="text-neutral-400" />
+                                      <span className="text-base font-medium text-neutral-700">
+                                        {community}
+                                      </span>
+                                    </div>
+                                    <span className="text-base text-neutral-500">
+                                      <span className={cn(
+                                        'font-bold',
+                                        rate >= 80 ? 'text-success-600' :
+                                        rate >= 50 ? 'text-warning-600' : 'text-danger-600'
+                                      )}>
+                                        {data.completed}
+                                      </span>
+                                      <span className="mx-1">/</span>
+                                      <span>{data.total}</span>
+                                      <span className="ml-2 text-neutral-400">
+                                        ({rate.toFixed(0)}%)
+                                      </span>
+                                    </span>
+                                  </div>
+                                  <div className="w-full h-2 bg-neutral-100 rounded-full overflow-hidden">
+                                    <div
+                                      className={cn(
+                                        'h-full rounded-full transition-all',
+                                        rate >= 80 ? 'bg-success-500' :
+                                        rate >= 50 ? 'bg-warning-500' : 'bg-danger-500'
+                                      )}
+                                      style={{ width: `${rate}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            }
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 }

@@ -50,11 +50,13 @@ export function generateUser(): User {
 export function generatePerson(community: string): Person {
   const gender = faker.helpers.arrayElement(['男', '女'] as const);
   const age = faker.number.int({ min: 55, max: 90 });
+  const street = STREETS[faker.number.int({ min: 0, max: STREETS.length - 1 })];
   return {
     id: generateId(),
     name: faker.person.lastName() + faker.person.firstName(),
     idCard: generateIdCard(),
-    address: `${community}${faker.number.int({ min: 1, max: 30 })}栋${faker.number.int({ min: 1, max: 6 })}单元${faker.number.int({ min: 101, max: 602 })}`,
+    address: `${street}${community}${faker.number.int({ min: 1, max: 30 })}栋${faker.number.int({ min: 1, max: 6 })}单元${faker.number.int({ min: 101, max: 602 })}`,
+    street,
     community,
     age,
     phone: generatePhone(),
@@ -181,37 +183,52 @@ export function generateFollowupRecord(taskId: string, operatorId: string): Foll
   };
 }
 
-export async function seedMockData(): Promise<void> {
+export async function seedMockData(userId?: string): Promise<void> {
   const db = getDB();
 
-  const existingUsers = await db.getAll('users');
-  if (existingUsers.length > 0) {
-    return;
+  let user: User | null = null;
+  if (userId) {
+    user = await db.get('users', userId);
+    const existingTasks = await db.getAllFromIndex('tasks', 'by-userId', userId);
+    if (existingTasks.length > 0) {
+      return;
+    }
+  } else {
+    const existingUsers = await db.getAll('users');
+    if (existingUsers.length > 0) {
+      return;
+    }
+    user = generateUser();
+    await db.put('users', user);
   }
 
-  const user = generateUser();
-  await db.put('users', user);
+  if (!user) return;
 
-  const communities = [user.community, COMMUNITIES[(COMMUNITIES.indexOf(user.community) + 1) % COMMUNITIES.length]];
-  const persons: Person[] = [];
+  const existingPersons = await db.getAll('persons');
+  let persons: Person[] = existingPersons;
 
-  for (let i = 0; i < 18; i++) {
-    const community = communities[i % communities.length];
-    const person = generatePerson(community);
-    persons.push(person);
-    await db.put('persons', person);
+  if (existingPersons.length === 0) {
+    const communities = [user.community, COMMUNITIES[(COMMUNITIES.indexOf(user.community) + 1) % COMMUNITIES.length]];
+    persons = [];
 
-    const certTypes: CertType[] = ['id_card', 'elderly_card', 'disability_card', 'low_income', 'medical'];
-    const numCerts = faker.number.int({ min: 2, max: 4 });
-    const selectedCerts = faker.helpers.arrayElements(certTypes, numCerts);
-    for (const certType of selectedCerts) {
-      const cert = generateCertificate(person.id, certType);
-      await db.put('certificates', cert);
+    for (let i = 0; i < 18; i++) {
+      const community = communities[i % communities.length];
+      const person = generatePerson(community);
+      persons.push(person);
+      await db.put('persons', person);
+
+      const certTypes: CertType[] = ['id_card', 'elderly_card', 'disability_card', 'low_income', 'medical'];
+      const numCerts = faker.number.int({ min: 2, max: 4 });
+      const selectedCerts = faker.helpers.arrayElements(certTypes, numCerts);
+      for (const certType of selectedCerts) {
+        const cert = generateCertificate(person.id, certType);
+        await db.put('certificates', cert);
+      }
     }
   }
 
   for (let i = 0; i < 15; i++) {
-    const task = generateTask(user.id, persons[i], i);
+    const task = generateTask(user.id, persons[i % persons.length], i);
     await db.put('tasks', task);
 
     if (task.status === 'completed') {
@@ -230,7 +247,9 @@ export async function seedMockData(): Promise<void> {
     }
   }
 
-  localStorage.setItem('currentUser', JSON.stringify(user));
+  if (!userId) {
+    localStorage.setItem('currentUser', JSON.stringify(user));
+  }
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -252,13 +271,21 @@ export function clearCurrentUser(): void {
 export async function login(employeeNo: string, _password: string): Promise<User | null> {
   const db = getDB();
   try {
-    const user = await db.getFromIndex('users', 'by-employeeNo', employeeNo);
-    if (user) {
-      setCurrentUser(user);
-      return user;
+    let user = await db.getFromIndex('users', 'by-employeeNo', employeeNo);
+    if (!user) {
+      user = {
+        id: generateId(),
+        employeeNo,
+        name: `网格员${employeeNo.slice(-4)}`,
+        community: COMMUNITIES[Math.floor(Math.random() * COMMUNITIES.length)],
+        role: 'worker',
+      };
+      await db.put('users', user);
     }
+    setCurrentUser(user);
+    return user;
   } catch (e) {
     console.error('Login error:', e);
+    return null;
   }
-  return null;
 }
